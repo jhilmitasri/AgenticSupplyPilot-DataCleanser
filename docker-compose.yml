@@ -1,0 +1,67 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: asp_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: aspuser
+      POSTGRES_PASSWORD: asppassword
+      POSTGRES_DB: aspdb
+    ports:
+      - "5543:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "aspuser", "-d", "aspdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+
+  streamlit:
+    build: ./dashboard
+    container_name: asp_streamlit
+    ports:
+      - "8501:8501"
+    depends_on:
+      - postgres
+    volumes:
+      - ./src:/app/src
+      - ./streamlitapp.py:/app/streamlitapp.py
+      - ./.env:/app/.env
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=aspuser
+      - DB_PASSWORD=asppassword
+      - DB_NAME=aspdb
+
+  agent:
+    build:
+      context: .
+      dockerfile: src/Dockerfile
+    container_name: asp_agent
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=aspuser
+      - DB_PASSWORD=asppassword
+      - DB_NAME=aspdb
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+    command: >
+      bash -c "
+        python ingestion/open_food_facts.py &&
+        python cleaning/data_cleaner.py &&
+        python anomalies/anomaly_detector.py &&
+        python llm_agent/explain_agent.py
+      "
+
+volumes:
+  postgres_data:
