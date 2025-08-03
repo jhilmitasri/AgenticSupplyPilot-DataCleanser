@@ -3,6 +3,24 @@ from dotenv import load_dotenv
 import os
 from transformers import pipeline
 import tiktoken
+from openai import OpenAIError
+from openai import OpenAI  # or `import openai` if you're using older SDK
+# from src.llm_agent.prompts import SUMMARY_PROMPT_TEMPLATE  # adjust import as needed
+
+SUMMARY_PROMPT_TEMPLATE = """
+You are an expert data quality analyst.
+
+Given a list of anomalies found in product data, your job is to:
+- Summarize key patterns (e.g., duplicates, invalid values)
+- Highlight any critical risks or frequent issues
+- Suggest steps for improving data quality
+
+Make the summary concise but insightful, in bullet point or paragraph form.
+
+Respond only with the summary.
+"""
+
+tokenizer = tiktoken.encoding_for_model("gpt-3.5-turbo")
 
 def estimate_tokens(text):
     enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
@@ -42,6 +60,28 @@ from collections import defaultdict
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+def generate_summary_with_openai(chunk, issue_type):
+    prompt = f"""
+You are a data quality analyst agent. Summarize the following anomalies found in product data:
+
+{chr(10).join(chunk)}
+
+Include high-level trends and flag any critical patterns you see.
+"""
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that summarizes food product anomalies."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.5
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"❌ Error summarizing issue type '{issue_type}':", e)
+        return ""
+
 def group_by_issue_type(records):
     grouped = defaultdict(list)
     for barcode, issue, val in records:
@@ -74,22 +114,7 @@ def run_openai_agent(anomalies):
 
             issue_summary_parts = []
             for i, chunk in enumerate(chunks):
-                chunk_prompt = f"""
-You are a data quality analyst agent. Summarize the following anomalies found in product data:
-
-{chr(10).join(chunk)}
-
-Include high-level trends and flag any critical patterns you see.
-"""
-                response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant that summarizes food product anomalies."},
-                        {"role": "user", "content": chunk_prompt}
-                    ],
-                    temperature=0.5
-                )
-                summary = response.choices[0].message.content.strip()
+                summary = generate_summary_with_openai(chunk, issue_type)
                 issue_summary_parts.append(f"🔹 Part {i+1} ({issue_type}):\n{summary}")
 
             summaries.append("\n\n".join(issue_summary_parts))

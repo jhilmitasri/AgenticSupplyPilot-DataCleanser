@@ -9,5 +9,8 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 # Copy source code
 COPY src/ /app/
 
+COPY src/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Optional: use entrypoint logic later
 CMD ["echo", "Agent container is ready"]
