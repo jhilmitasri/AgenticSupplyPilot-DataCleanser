@@ -2,6 +2,11 @@ import psycopg2
 from dotenv import load_dotenv
 import os
 from transformers import pipeline
+import tiktoken
+
+def estimate_tokens(text):
+    enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
+    return len(enc.encode(text))
 
 load_dotenv()
 
@@ -33,22 +38,74 @@ Include high-level trends and flag any critical patterns you see.
 """
 
 from openai import OpenAI
+from collections import defaultdict
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def run_openai_agent(anomalies):
-    input_text = build_prompt(anomalies)
+def group_by_issue_type(records):
+    grouped = defaultdict(list)
+    for barcode, issue, val in records:
+        grouped[issue].append((barcode, issue, val))
+    return grouped
 
+def run_openai_agent(anomalies):
+    # Summarize by issue type to reduce token usage
     try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",  # cheap, fast, still very good
+        summaries = []
+        grouped = group_by_issue_type(anomalies)
+        for issue_type, group in grouped.items():
+            text_rows = [f"- [{barcode}] {issue_type} (Value: {val})" for barcode, _, val in group]
+
+            # Chunk rows to avoid exceeding token limit
+            chunks = []
+            current_chunk = []
+            current_tokens = 0
+            for row in text_rows:
+                row_tokens = estimate_tokens(row)
+                if current_tokens + row_tokens > 3000:
+                    chunks.append(current_chunk)
+                    current_chunk = [row]
+                    current_tokens = row_tokens
+                else:
+                    current_chunk.append(row)
+                    current_tokens += row_tokens
+            if current_chunk:
+                chunks.append(current_chunk)
+
+            issue_summary_parts = []
+            for i, chunk in enumerate(chunks):
+                chunk_prompt = f"""
+You are a data quality analyst agent. Summarize the following anomalies found in product data:
+
+{chr(10).join(chunk)}
+
+Include high-level trends and flag any critical patterns you see.
+"""
+                response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant that summarizes food product anomalies."},
+                        {"role": "user", "content": chunk_prompt}
+                    ],
+                    temperature=0.5
+                )
+                summary = response.choices[0].message.content.strip()
+                issue_summary_parts.append(f"🔹 Part {i+1} ({issue_type}):\n{summary}")
+
+            summaries.append("\n\n".join(issue_summary_parts))
+
+        final_summary_prompt = "\n\n".join(summaries)
+        final_response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are a data quality summarization agent."},
-                {"role": "user", "content": input_text}
+                {"role": "system", "content": "You are a helpful assistant that summarizes food product anomalies."},
+                {"role": "user", "content": f"Summarize the following combined insights:\n\n{final_summary_prompt}"}
             ],
             temperature=0.5
         )
-        return response.choices[0].message.content.strip()
+        final_summary = final_response.choices[0].message.content.strip()
+        print("[SUMMARY]", final_summary)
+        return final_summary
     except Exception as e:
         print("❌ Error during OpenAI summary:", e)
         return ""
