@@ -34,11 +34,11 @@ def fetch_agent_logs():
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT created_at, message
+        SELECT log_type, message, created_at
         FROM agent_logs
         WHERE log_type = 'anomaly_summary'
         ORDER BY created_at DESC
-        LIMIT 10
+        LIMIT 10;
         """
     )
     logs = cur.fetchall()
@@ -60,7 +60,7 @@ with col2:
 
 # Refresh Button
 if st.button("🔁 Refresh LLM Summary"):
-    st.success("LLM Summary refresh triggered! (To be connected to agent runner)")
+    st.success("TODO: LLM Summary refresh triggered! (To be connected to agent runner)")
 
 # Display Anomalies
 start_dt = datetime.combine(start_date, datetime.min.time())
@@ -70,9 +70,40 @@ anomaly_df = fetch_anomalies_by_date(start_dt, end_dt)
 st.subheader("⚠️ Recent Anomalies")
 st.dataframe(anomaly_df, use_container_width=True)
 
-# Display Agent Logs
-st.subheader("🧠 Agent Summaries")
-logs = fetch_agent_logs()
-for timestamp, message in logs:
-    with st.expander(f"{timestamp}"):
-        st.markdown(message)
+# Agent Logs
+st.markdown("###  Agent Insights Log")
+
+conn = psycopg2.connect(**DB_CONFIG)
+cur = conn.cursor()
+cur.execute("""
+    SELECT created_at, message
+    FROM agent_logs
+    WHERE log_type = 'anomaly_summary'
+    ORDER BY created_at DESC
+""")
+logs = cur.fetchall()
+cur.close()
+conn.close()
+# st.write("🔍 Number of summaries fetched:", len(logs))
+# st.write("🪵 Raw logs preview:", logs[:1])
+if logs:
+    for created_at, message in logs:
+        with st.expander(f"🧠 Log @ {created_at}"):
+            st.text_area("Summary", message or "No content", height=300)
+else:
+    st.info("No agent logs found.")
+st.caption(f"Last updated at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+# Optional styling tweak
+st.markdown("""
+    <style>
+    .element-container:has(.stMarkdown) {
+        max-height: None;
+        # overflow-y: auto;
+        # border: 1px solid #DDD;
+        # padding: 1rem;
+        # border-radius: 8px;
+        
+    }
+    
+    </style>
+""", unsafe_allow_html=True)

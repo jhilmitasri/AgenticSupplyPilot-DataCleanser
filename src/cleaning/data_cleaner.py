@@ -13,14 +13,25 @@ DB_CONFIG = {
 }
 
 def clean_record(row):
-    product_name = (row[1] or "").strip().title()
-    brand = (row[2] or "Unknown").strip().lower()
-    categories = (row[3] or "Uncategorized").strip().lower()
-    barcode = row[4]
-    quantity = (row[5] or "").strip().lower()
-    nutriscore_grade = (row[6] or "not_set").strip().lower()
-    url = row[7]
-    return (product_name, brand, categories, barcode, quantity, nutriscore_grade, url)
+    try:
+        (
+            product_name, brand, categories, barcode,
+            quantity, nutriscore_grade, url, last_updated_at
+        ) = row
+
+        return (
+            (product_name or "").strip().title(),
+            (brand or "Unknown").strip().lower(),
+            (categories or "Uncategorized").strip().lower(),
+            barcode,
+            (quantity or "").strip().lower(),
+            (nutriscore_grade or "not_set").strip().lower(),
+            url,
+            last_updated_at
+        )
+    except Exception as e:
+        print(f"[CLEANING ERROR] Failed to clean row: {row} -> {e}")
+        return None
 
 def clean_data():
     conn = psycopg2.connect(**DB_CONFIG)
@@ -35,9 +46,9 @@ def clean_data():
     insert_query = """
         INSERT INTO cleaned_data (
             product_name, brand, categories, barcode,
-            quantity, nutriscore_grade, url
+            quantity, nutriscore_grade, url, last_updated_at
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     cur.executemany(insert_query, cleaned)

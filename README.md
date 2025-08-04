@@ -96,7 +96,7 @@ python src/ingestion/open_food_facts.py
 python src/cleaning/data_cleaner.py
 python src/anomalies/anomaly_detector.py
 python src/llm_agent/explain_agent.py
-streamlit run dashboard/Streamlitapp.py
+streamlit run dashboard/streamlit_app.py
 ```
 
 ---
@@ -104,7 +104,7 @@ streamlit run dashboard/Streamlitapp.py
 ## 📊 Dashboard Features
 
 - Filter anomalies by date
-- View the 10 most recent LLM summaries
+- View recent LLM summaries with timestamped expanders
 - Interactive exploration of the anomalies table
 
 ---
@@ -127,7 +127,12 @@ streamlit run dashboard/Streamlitapp.py
 
 ## 🛣️ Future Roadmap
 
--
+- ✅ Improved log visibility and styling in dashboard
+- ✅ Added LLM summary storage and retrieval with timestamps
+- ✅ Integrated dynamic date filter and expander-based log preview
+- ⏳ Plan to enable manual refresh trigger for daily agent pipeline
+- ⏳ Add anomaly metrics chart (category/issue-wise counts)
+- ⏳ Improve mobile/tablet responsiveness and reduce scroll height
 
 ---
 
